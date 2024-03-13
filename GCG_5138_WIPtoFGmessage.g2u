@@ -1,0 +1,39 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'This project has been created for Calwell to Notify WIP to FG when there is a failed backflush transaction 
+'Created by SKC on 6/8/2018
+'This runs from the Pre save hook in Shop Floor Control -> Transactions -> WIP to FG.  User will have selected a Work order and clicked save to get this hook to fire.
+'We will check the Job_Trans_Err table to see if there is a record for the selected Job and Suffix, and if there are any records for a Trans code of J55
+'I left this all in main since it was such a small program, but all the code in the first If could be moved to a separate sub
+
+v.Local.iRet.Declare
+v.Local.sSql.Declare
+v.Local.sMessage.Declare
+V.Local.sError.Declare
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.If(v.Caller.Hook, =, 16502)
+	'Job passed Variable = 000003, Suffix Passed Variable = 000004 
+	F.Intrinsic.String.Build("Select Count(Tran_ID) As ErrorCount from Job_Trans_Err where Job = '{0}' and Suffix = '{1}'", v.Passed.000003, v.Passed.000004, v.Local.sSql)
+	F.ODBC.Connection!con.OpenCompanyConnection()
+	F.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSql, v.Local.iRet)
+	F.ODBC.Connection!con.Close
+	F.Intrinsic.Control.If(v.Local.iRet, >, 0)
+		'We have error record so we will need to prompt the user if they want to continue with the WIP to FG or stop.
+		F.Intrinsic.String.Build("There are {0} Issue Material Errors for this Job.{1} Do you wish to continue?", v.Local.iRet, v.Ambient.NewLine, v.Local.sMessage)
+		F.Intrinsic.UI.Msgbox(v.Local.sMessage, "Transaction Errors", 4, v.Local.iRet)
+		'If the user wishes to stop the transaction set passed.777777 to 1 so WIP to FG will be stopped otherwise we let the transaction continue
+		'this message prompts with a Yes or No response.  Yes = 6 No = 7 for the return.
+		F.Intrinsic.Control.If(v.Local.iRet,!=, 6)
+			v.Passed.777777.Set(1)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
